@@ -1,0 +1,168 @@
+class Sudoku_AI_solver:
+    def _init_(self, puzzle):
+        self.puzzle = puzzle
+        self.spots = [(r, c) for r in range(9) for c in range(9)]
+        self.options = {
+            (r, c): {puzzle[r][c]} if puzzle[r][c] != 0 else set(range(1, 10))
+            for r in range(9) for c in range(9)
+        }
+        self.links = self._map_neighbors()
+
+    def _map_neighbors(self):
+        neighbors = {}
+        for r, c in self.spots:
+            row_peers = [(r, k) for k in range(9) if k != c]
+            col_peers = [(k, c) for k in range(9) if k != r]
+            box_r, box_c = 3 * (r // 3), 3 * (c // 3)
+            box_peers = [
+                (i, j) for i in range(box_r, box_r + 3)
+                        for j in range(box_c, box_c + 3)
+                        if (i, j) != (r, c)
+            ]
+            all_peers = set(row_peers + col_peers + box_peers)
+            neighbors[(r, c)] = all_peers
+        return neighbors
+
+    def apply_initial_rules(self):
+        for cell in self.spots:
+            if len(self.options[cell]) == 1:
+                self.options[cell] = set(self.options[cell])
+
+    def refine_arc(self, a, b):
+        revised = False
+        to_remove = set()
+        for val in self.options[a]:
+            if all(val == y for y in self.options[b]):
+                to_remove.add(val)
+        if to_remove:
+            self.options[a] -= to_remove
+            revised = True
+        return revised
+
+    def enforce_arc_consistency(self):
+        queue = [(a, b) for a in self.spots for b in self.links[a]]
+        while queue:
+            a, b = queue.pop(0)
+            if self.refine_arc(a, b):
+                if not self.options[a]:
+                    return False
+                for n in self.links[a]:
+                    if n != b:
+                        queue.append((n, a))
+        return True
+
+    def is_filled(self, config):
+        return all(len(config[cell]) == 1 for cell in self.spots)
+
+    def respects_rules(self, cell, value, config):
+        for peer in self.links[cell]:
+            if len(config[peer]) == 1 and value == next(iter(config[peer])):
+                return False
+        return True
+
+    def prioritize_values(self, cell):
+        def conflict(val):
+            return sum(val in self.options[peer] for peer in self.links[cell])
+        return sorted(self.options[cell], key=conflict)
+
+    def pick_next_cell(self, config):
+        candidates = [c for c in self.spots if len(config[c]) > 1]
+        return min(candidates, key=lambda c: (len(self.options[c]), -len(self.links[c])))
+
+    def deep_copy(self, original):
+        return {k: set(v) for k, v in original.items()}
+
+    def recursive_solver(self, config):
+        if self.is_filled(config):
+            return config
+        var = self.pick_next_cell(config)
+        for val in self.prioritize_values(var):
+            if self.respects_rules(var, val, config):
+                snapshot = self.deep_copy(config)
+                snapshot[var] = {val}
+                saved = self.deep_copy(self.options)
+                self.options[var] = {val}
+                if self.enforce_arc_consistency():
+                    outcome = self.recursive_solver(snapshot)
+                    if outcome:
+                        return outcome
+                self.options = self.deep_copy(saved)
+        return None
+
+    def crack(self):
+        self.apply_initial_rules()
+        self.enforce_arc_consistency()
+        initial = self.deep_copy(self.options)
+        solved = self.recursive_solver(initial)
+        if solved:
+            return [[next(iter(solved[(r, c)])) for c in range(9)] for r in range(9)]
+        return None
+
+
+def show_board(board):
+    print("+-------+-------+-------+")
+    for i in range(9):
+        row = "|"
+        for j in range(9):
+            val = board[i][j] if board[i][j] != 0 else "."
+            row += f" {val} "
+            if (j + 1) % 3 == 0:
+                row += "|"
+        print(row)
+        if (i + 1) % 3 == 0:
+            print("+-------+-------+-------+")
+
+
+def run_solver(puzzle, label):
+    print(f"\nSolving: {label}")
+    import time
+    start = time.time()
+    engine = Sudoku_AI_solver(puzzle)
+    result = engine.crack()
+    end = time.time()
+    if result:
+        show_board(result)
+        print(f"Solved in {end - start:.2f} seconds")
+    else:
+        print("No solution found.")
+
+
+# Test boards
+sudoku_easy = [
+    [0, 3, 4, 6, 0, 0, 0, 0, 2],
+    [6, 0, 0, 1, 9, 5, 3, 4, 8],
+    [1, 0, 0, 3, 0, 2, 5, 6, 7],
+    [0, 5, 9, 7, 6, 1, 4, 2, 0],
+    [4, 0, 0, 0, 0, 3, 7, 0, 0],
+    [0, 0, 0, 0, 0, 0, 0, 0, 6],
+    [0, 6, 1, 0, 0, 0, 2, 8, 4],
+    [2, 0, 0, 4, 1, 0, 0, 0, 5],
+    [0, 0, 5, 0, 0, 0, 0, 7, 9]
+]
+sudoku_medium = [
+    [1, 0, 6, 4, 0, 0, 0, 0, 7],
+    [0, 0, 9, 0, 0, 7, 0, 0, 0],
+    [0, 0, 8, 9, 2, 0, 0, 4, 6],
+    [0, 6, 0, 1, 0, 4, 2, 0, 0],
+    [0, 8, 1, 0, 0, 0, 0, 3, 0],
+    [2, 0, 0, 8, 0, 5, 6, 0, 1],
+    [0, 0, 0, 0, 0, 0, 0, 0, 0],
+    [0, 3, 4, 0, 6, 0, 7, 0, 0],
+    [0, 1, 7, 0, 0, 0, 9, 6, 0]
+]
+sudoku_hard = [
+    [0, 7, 0, 0, 0, 0, 2, 0, 0],
+    [0, 0, 0, 0, 1, 0, 0, 0, 3],
+    [0, 0, 5, 2, 0, 4, 0, 0, 0],
+    [0, 0, 0, 6, 0, 7, 0, 0, 1],
+    [7, 0, 4, 5, 9, 0, 3, 0, 0],
+    [1, 0, 0, 0, 0, 2, 0, 8, 0],
+    [0, 1, 0, 0, 0, 3, 0, 0, 5],
+    [0, 0, 0, 0, 0, 0, 6, 0, 8],
+    [5, 2, 0, 0, 7, 0, 0, 1, 0]
+]
+
+# Run solver
+run_solver(sudoku_easy, "Sudoku Easy")
+run_solver(sudoku_medium, "Sudoku Medium")
+run_solver(sudoku_hard, "Sudoku Hard")
