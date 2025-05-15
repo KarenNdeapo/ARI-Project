@@ -1,5 +1,5 @@
 class Sudoku_AI_solver:
-    def _init_(self, puzzle):
+    def __init__(self, puzzle):
         self.puzzle = puzzle
         self.spots = [(r, c) for r in range(9) for c in range(9)]
         self.options = {

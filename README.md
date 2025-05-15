@@ -1,2 +1,0 @@
-# ARI-Project
- Python programmes
