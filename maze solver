@@ -1,0 +1,138 @@
+import heapq
+from PIL import Image, ImageDraw
+
+class Node:
+    def __init__(self, state, parent, action, cost):
+        self.state = state
+        self.parent = parent
+        self.action = action
+        self.cost = cost
+
+    def __lt__(self, other):
+        return False  
+
+class Maze:
+    def __init__(self, filename):
+        self.walls = set()
+        self.start = None
+        self.goal = None
+        with open(filename) as f:
+            self.grid = [list(line.strip()) for line in f.readlines()]
+        self.height = len(self.grid)
+        self.width = len(self.grid[0])
+        for row in range(self.height):
+            for col in range(self.width):
+                if self.grid[row][col] == 'A':
+                    self.start = (row, col)
+                elif self.grid[row][col] == 'B':
+                    self.goal = (row, col)
+                elif self.grid[row][col] == '#':
+                    self.walls.add((row, col))
+
+    def neighbors(self, state):
+        row, col = state
+        candidates = [(row-1, col, "up"), (row+1, col, "down"), (row, col-1, "left"), (row, col+1, "right")]
+        result = []
+        for r, c, action in candidates:
+            if 0 <= r < self.height and 0 <= c < self.width and (r, c) not in self.walls:
+                result.append((r, c, action))
+        return result
+
+    def heuristic(self, state):
+        goal_row, goal_col = self.goal
+        row, col = state
+        return abs(goal_row - row) + abs(goal_col - col)
+
+def solve(maze, algorithm="greedy"):
+    start = Node(state=maze.start, parent=None, action=None, cost=0)
+    frontier = []
+    heapq.heappush(frontier, (maze.heuristic(start.state) if algorithm == "greedy" else start.cost + maze.heuristic(start.state), start))
+    explored = set()
+    came_from = {}
+
+    while frontier:
+        _, current = heapq.heappop(frontier)
+        if current.state == maze.goal:
+            path = []
+            actions = []
+            while current.parent is not None:
+                path.append(current.state)
+                actions.append(current.action)
+                current = current.parent
+            path.reverse()
+            actions.reverse()
+            return path, actions, explored
+
+        explored.add(current.state)
+        for neighbor in maze.neighbors(current.state):
+            neighbor_state, action = neighbor[0:2], neighbor[2]
+            if neighbor_state not in explored:
+                neighbor_node = Node(state=neighbor_state, parent=current, action=action, cost=current.cost + 1)
+                priority = (maze.heuristic(neighbor_state) if algorithm == "greedy" 
+                            else neighbor_node.cost + maze.heuristic(neighbor_state))
+                heapq.heappush(frontier, (priority, neighbor_node))
+
+    raise Exception("No path found")
+
+def draw_maze(maze, path=[], actions=[], explored=[], filename="maze.png", cell_size=20, cell_border=2, show_solution=True, show_explored=True):
+    img = Image.new('RGB', (maze.width * cell_size, maze.height * cell_size), (237, 240, 252))  # Background color (light gray)
+    draw = ImageDraw.Draw(img)
+
+    solution = path if path else None  
+    for i in range(maze.height):
+        for j in range(maze.width):
+            # Walls
+            if (i, j) in maze.walls:
+                fill = (0, 0, 0) 
+            # Start
+            elif (i, j) == maze.start:
+                fill = (255, 0, 0)  
+            # Goal
+            elif (i, j) == maze.goal:
+                fill = (0, 171, 28)  
+            # Solution (path)
+            elif solution is not None and (i, j) in solution:
+                fill = (255, 20, 147) 
+            # Explored
+            elif show_explored and (i, j) in explored:
+                fill = (255, 182, 193)  
+            # Empty cell
+            else:
+                fill = (237, 240, 252)  
+
+            # Draw cell
+            draw.rectangle(
+                [(j * cell_size + cell_border, i * cell_size + cell_border),
+                 ((j + 1) * cell_size - cell_border, (i + 1) * cell_size - cell_border)],
+                fill=fill
+            )
+
+    draw.rectangle(
+        [(0, 0), (maze.width * cell_size, maze.height * cell_size)],
+        outline=(0, 0, 0), width=cell_border
+    )
+
+    img.save(filename)
+    img.show()
+
+# A* Search
+maze_astar = Maze("maze2.txt")
+path_astar, actions_astar, explored_astar = solve(maze_astar, algorithm="astar")
+draw_maze(
+    maze_astar,
+    path=path_astar,
+    actions=actions_astar,
+    explored=explored_astar,
+    filename="A_Star_maze.png"
+)
+
+# Greedy Best-First Search
+maze_greedy = Maze("maze2.txt")
+path_greedy, actions_greedy, explored_greedy = solve(maze_greedy, algorithm="greedy")
+draw_maze(
+    maze_greedy,
+    path=path_greedy,
+    actions=actions_greedy,
+    explored=explored_greedy,
+    filename="GBFS_maze.png"
+)
